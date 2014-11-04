@@ -26,7 +26,8 @@ module Turnpike
     # items - A splat Array of items.
     #
     # Returns nothing.
-    def push(*items, score: Time.now.to_f)
+    def push(score = nil, *items)
+      score ||= Time.now.to_f
       redis.zadd(name, items.reduce([]) { |ary, i| ary.push(score, pack(i)) })
     end
 
