@@ -45,13 +45,15 @@ class TestTurnpike < MiniTest::Unit::TestCase
   def bench_unique
     queue = Turnpike.call(unique: true)
     assert_performance_linear do |n|
-      queue.push(*(1..n).to_a)
+      queue.push(*(1..n).to_a, nil)
       1.upto(n) { queue.pop }
     end
   end
 end
 
-module QueueTests
+class TestQueue < MiniTest::Unit::TestCase
+  def klass; Turnpike::Queue; end
+
   def queue
     @queue ||= klass.new('foo')
   end
@@ -112,12 +114,6 @@ module QueueTests
     assert_equal 1, q1.size
     assert_equal 2, q2.size
   end
-end
-
-class TestQueue < MiniTest::Unit::TestCase
-  include QueueTests
-
-  def klass; Turnpike::Queue; end
 
   def peek(queue)
     queue.redis.lrange(queue.name, 0, -1).map { |i| queue.unpack(i) }
@@ -149,9 +145,73 @@ class TestQueue < MiniTest::Unit::TestCase
 end
 
 class TestUniqueQueue < MiniTest::Unit::TestCase
-  include QueueTests
+  DEFAULT_SCORE = nil
 
   def klass; Turnpike::UniqueQueue; end
+
+  def queue
+    @queue ||= Turnpike::UniqueQueue.new('foo')
+  end
+
+  def setup
+    Redis.current.flushall
+  end
+
+  def test_push
+    queue.push(1, DEFAULT_SCORE)
+    assert_equal 1, queue.size
+    queue.push(2, 3, DEFAULT_SCORE)
+    assert_equal [1, 2, 3], peek(queue)
+  end
+
+  def test_emptiness
+    assert queue.empty?
+    queue.push(1, DEFAULT_SCORE)
+    assert !queue.empty?
+    queue.clear
+    assert queue.empty?
+  end
+
+  def test_unshift
+    score = 3
+    queue.push(1, score)
+    queue.unshift(2, 3)
+    assert_equal 3, queue.size
+    assert_equal 1, peek(queue).last
+  end
+
+  def test_pop
+    score = 3
+    queue.push(1, 2, score)
+    assert_equal 1, queue.pop
+    assert_equal 2, queue.pop
+    assert_equal nil, queue.pop
+  end
+
+  def test_pop_many
+    queue.push(1, 2, 3, DEFAULT_SCORE)
+    assert_equal [1, 2], queue.pop(2)
+    assert_equal [3], queue.pop(2)
+    assert_equal [], queue.pop(2)
+  end
+
+  def test_order
+    score = 10
+    queue.push(1, 2, score)
+    queue.unshift(3)
+    assert_equal 3, queue.pop
+    assert_equal 1, queue.pop
+    assert_equal 2, queue.pop
+  end
+
+  def test_multiplicity
+    q1 = klass.new('foo')
+    q2 = klass.new('bar')
+    q1.push(1, DEFAULT_SCORE)
+    q2.push(2, 3, DEFAULT_SCORE)
+    assert_equal 1, q1.size
+    assert_equal 2, q2.size
+  end
 
   def peek(queue)
     queue.redis.zrange(queue.name, 0, -1).map { |i| queue.unpack(i) }

@@ -10,9 +10,12 @@ module Turnpike
 
     attr :name, :redis
 
-    def initialize(name, redis: Redis.current)
+    def initialize(name, options = {})
+      default_options = {redis: Redis.current}
+      options = default_options.merge(options)
+
       @name = "#{Turnpike.namespace}:#{name}"
-      @redis = redis
+      @redis = options[:redis]
     end
 
     def clear

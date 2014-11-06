@@ -26,7 +26,9 @@ module Turnpike
     # items - A splat Array of items.
     #
     # Returns nothing.
-    def push(*items, score: Time.now.to_f)
+    def push(*items, score)
+      score = score || Time.now.to_f
+
       redis.zadd(name, items.reduce([]) { |ary, i| ary.push(score, pack(i)) })
     end
 
@@ -44,7 +46,7 @@ module Turnpike
     # Returns nothing.
     def unshift(*items)
       _, score = redis.zrange(name, 0, 0, with_scores: true).pop
-      score ? push(*items, score: score - 1) : push(*items)
+      score ? push(*items, score - 1) : push(*items)
     end
 
     private
